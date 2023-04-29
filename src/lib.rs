@@ -1,6 +1,11 @@
 use pyo3::prelude::*;
 use std::sync::{Arc, Mutex};
 
+// 1. Mudar de "Arc<Mutex<Node>>" para Option<Arc<Mutex<Node>>> para permitir listas vazias
+// 2. Uma função para contar o numero de itens presentes na lista circular
+// 3. Adicionar um limite de itens na lista circular, e que ao tentar adicionar um novo item, caso o limite seja atingido, o item mais antigo seja removido
+// 4. Uma função para retunar todos os itens da lista circular como um vetor (que no Python é uma lista)
+
 #[pyclass]
 pub struct Circle {
     head: Arc<Mutex<Node>>,
