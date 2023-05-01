@@ -168,6 +168,47 @@ impl Circle {
         }
         return count;
     }
+
+    pub fn to_vec(&self) -> Vec<PyObject> {
+        let mut ret: Vec<PyObject> = Vec::new();
+
+        match &self.head {
+            Some(head) => {
+                let mut current: Option<Arc<Mutex<Node>>> = Some(head.clone());
+
+                loop {
+                    let current_value: Py<PyAny> = {
+                        let current_guard: MutexGuard<Node> =
+                            current.as_ref().unwrap().lock().unwrap();
+                        current_guard.value()
+                    };
+
+                    ret.push(current_value);
+
+                    let next: Option<Arc<Mutex<Node>>> = {
+                        let current_guard: MutexGuard<Node> =
+                            current.as_ref().unwrap().lock().unwrap();
+                        current_guard.next.as_ref().map(Clone::clone)
+                    };
+
+                    if let Some(next) = next {
+                        if Arc::ptr_eq(&next, head) {
+                            break;
+                        }
+                        current = Some(next);
+                    } else {
+                        break;
+                    }
+                }
+            }
+            None => {
+                // Quando a lista estiver vazia, retorne o vetor vazio.
+                return ret;
+            }
+        }
+
+        return ret;
+    }
 }
 
 impl Node {
