@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 #[pyclass]
 pub struct Circle {
-    head: Arc<Mutex<Node>>,
+    head: Option<Arc<Mutex<Node>>>,
 }
 
 struct Node {
@@ -20,110 +20,107 @@ struct Node {
 
 #[pymethods]
 impl Circle {
-    pub fn remove_current(&mut self) -> PyObject {
-        let ret: Py<PyAny> = self.current_value();
-        let (next, last) = {
-            let head_guard: MutexGuard<Node> = self.head.lock().unwrap();
-            (
-                head_guard.next.as_ref().map(Clone::clone),
-                head_guard.last.as_ref().map(Clone::clone),
-            )
-        };
-        let mut next: Arc<Mutex<Node>> = next.unwrap();
-        let mut last: Arc<Mutex<Node>> = last.unwrap();
-
-        Node::combine(&mut last, &mut next);
-        self.head = next;
-        return ret;
-    }
-
     #[new]
-    pub fn new(val: PyObject) -> Circle {
-        return Circle {
-            head: Node::new(val),
-        };
+    pub fn new() -> Circle {
+        return Circle { head: None };
     }
 
     pub fn current_value(&self) -> PyObject {
-        let head_guard: MutexGuard<Node> = self.head.lock().unwrap();
-        return head_guard.value();
+        match self.head {
+            Some(ref x) => {
+                let head_guard: MutexGuard<Node> = x.lock().unwrap();
+
+                return head_guard.value();
+            }
+            None => Python::with_gil(|py| py.None()),
+        }
+    }
+    pub fn remove_current(&mut self) -> PyObject {
+        let ret: PyObject = self.current_value();
+        if let Some(ref head) = self.head {
+            let (next, last) = {
+                let head_guard: MutexGuard<Node> = head.lock().unwrap();
+                (
+                    head_guard.next.as_ref().map(Clone::clone),
+                    head_guard.last.as_ref().map(Clone::clone),
+                )
+            };
+
+            match (next, last) {
+                (Some(mut next), Some(mut last)) => {
+                    Node::combine(&mut last, &mut next);
+                    self.head = Some(next);
+                }
+                _ => {
+                    self.head = None;
+                }
+            }
+        }
+        return ret;
     }
 
     pub fn move_next(&mut self) -> PyObject {
-        let next: Option<Arc<Mutex<Node>>> = {
-            let head_guard: MutexGuard<Node> = self.head.lock().unwrap();
-            head_guard.next.as_ref().map(Clone::clone)
-        };
-        match next {
-            Some(x) => self.head = x.clone(),
-            None => (),
+        if let Some(ref head) = self.head {
+            let next = {
+                let head_guard: MutexGuard<Node> = head.lock().unwrap();
+                head_guard.next.as_ref().map(Clone::clone)
+            };
+
+            if let Some(next) = next {
+                self.head = Some(next);
+            }
         }
-        let head_guard: MutexGuard<Node> = self.head.lock().unwrap();
-        head_guard.value()
+
+        return self.current_value();
     }
 
     pub fn move_previous(&mut self) -> PyObject {
-        let last: Option<Arc<Mutex<Node>>> = {
-            let head_guard: MutexGuard<Node> = self.head.lock().unwrap();
-            head_guard.last.as_ref().map(Clone::clone)
-        };
-        match last {
-            Some(x) => self.head = x.clone(),
-            None => (),
+        if let Some(ref head) = self.head {
+            let last = {
+                let head_guard: MutexGuard<Node> = head.lock().unwrap();
+                head_guard.last.as_ref().map(Clone::clone)
+            };
+
+            if let Some(last) = last {
+                self.head = Some(last);
+            }
         }
-        let head_guard: MutexGuard<Node> = self.head.lock().unwrap();
-        head_guard.value()
+
+        return self.current_value();
     }
 
     pub fn insert_after_current(&mut self, val: PyObject) {
-        let (node, mut head) = {
-            let head_guard: MutexGuard<Node> = self.head.lock().unwrap();
-            (
-                head_guard.next.as_ref().map(Clone::clone),
-                self.head.clone(),
-            )
-        };
-        let mut new_node: Arc<Mutex<Node>> = Node::new(val);
-        Node::combine(&mut head, &mut new_node);
-        Node::combine(&mut new_node, &mut node.unwrap_or(head));
-    }
-
-    pub fn insert_after_step(&mut self, val: PyObject) {
-        self.insert_after_current(val);
-        self.move_next();
-    }
-
-    pub fn insert_and_move_next(&mut self, val: PyObject) {
-        let (node, mut head) = {
-            let head_guard: MutexGuard<Node> = self.head.lock().unwrap();
-            (
-                head_guard.last.as_ref().map(Clone::clone),
-                self.head.clone(),
-            )
-        };
-        let mut new_node: Arc<Mutex<Node>> = Node::new(val);
-        Node::combine(&mut new_node, &mut head);
-        Node::combine(&mut node.unwrap_or(head), &mut new_node);
+        if let Some(ref head) = self.head {
+            let (node, mut head) = {
+                let head_guard: MutexGuard<Node> = head.lock().unwrap();
+                (head_guard.next.as_ref().map(Clone::clone), head.clone())
+            };
+            let mut new_node: Arc<Mutex<Node>> = Node::new(val);
+            Node::combine(&mut head, &mut new_node);
+            Node::combine(&mut new_node, &mut node.unwrap_or(head));
+        } else {
+            let new_node = Node::new(val);
+            self.head = Some(new_node);
+        }
     }
 
     pub fn insert_before_current(&mut self, val: PyObject) {
-        let (node, mut head) = {
-            let head_guard = self.head.lock().unwrap();
-            (
-                head_guard.last.as_ref().map(Clone::clone),
-                self.head.clone(),
-            )
-        };
-        let mut new_node: Arc<Mutex<Node>> = Node::new(val);
-        Node::combine(&mut new_node, &mut head);
-        Node::combine(&mut node.unwrap_or(head), &mut new_node);
+        if let Some(ref head) = self.head {
+            let (node, mut head) = {
+                let head_guard = head.lock().unwrap();
+                (head_guard.last.as_ref().map(Clone::clone), head.clone())
+            };
+            let mut new_node: Arc<Mutex<Node>> = Node::new(val);
+            Node::combine(&mut new_node, &mut head);
+            Node::combine(&mut node.unwrap_or(head), &mut new_node);
+        } else {
+            let new_node = Node::new(val);
+            self.head = Some(new_node);
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        match self.head.lock() {
-            Ok(_head_guard) => false,
-            Err(_) => true,
-        }
+        return self.head.is_none();
     }
 }
 
