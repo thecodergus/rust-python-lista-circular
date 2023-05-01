@@ -99,6 +99,8 @@ impl Circle {
                 self.move_next();
                 self.remove_current();
                 self.move_previous();
+
+                self.max_size = Some(max_size - 1);
             }
         }
 
