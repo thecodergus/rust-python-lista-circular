@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 #[pyclass]
 pub struct Circle {
     head: Option<Arc<Mutex<Node>>>,
+    max_size: Option<usize>,
 }
 
 struct Node {
@@ -21,8 +22,11 @@ struct Node {
 #[pymethods]
 impl Circle {
     #[new]
-    pub fn new() -> Circle {
-        return Circle { head: None };
+    pub fn new(max_size: Option<usize>) -> Circle {
+        Circle {
+            head: None,
+            max_size,
+        }
     }
 
     pub fn current_value(&self) -> PyObject {
@@ -90,6 +94,14 @@ impl Circle {
     }
 
     pub fn insert_after_current(&mut self, val: PyObject) {
+        if let Some(max_size) = self.max_size {
+            if self.count() >= max_size {
+                self.move_next();
+                self.remove_current();
+                self.move_previous();
+            }
+        }
+
         if let Some(ref head) = self.head {
             let (node, mut head) = {
                 let head_guard: MutexGuard<Node> = head.lock().unwrap();
@@ -105,6 +117,13 @@ impl Circle {
     }
 
     pub fn insert_before_current(&mut self, val: PyObject) {
+        if let Some(max_size) = self.max_size {
+            if self.count() >= max_size {
+                self.move_previous();
+                self.remove_current();
+            }
+        }
+
         if let Some(ref head) = self.head {
             let (node, mut head) = {
                 let head_guard = head.lock().unwrap();
@@ -121,6 +140,31 @@ impl Circle {
 
     pub fn is_empty(&self) -> bool {
         return self.head.is_none();
+    }
+
+    pub fn count(&self) -> usize {
+        if self.is_empty() {
+            return 0;
+        }
+
+        let mut count: usize = 0;
+        let mut current: Option<Arc<Mutex<Node>>> = self.head.clone();
+        loop {
+            count += 1;
+            let next: Option<Arc<Mutex<Node>>> = {
+                let current_guard = current.as_ref().unwrap().lock().unwrap();
+                current_guard.next.as_ref().map(Clone::clone)
+            };
+            if let Some(next) = next {
+                if Arc::ptr_eq(&next, self.head.as_ref().unwrap()) {
+                    break;
+                }
+                current = Some(next);
+            } else {
+                break;
+            }
+        }
+        return count;
     }
 }
 
