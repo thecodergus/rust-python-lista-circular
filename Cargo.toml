@@ -6,7 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pyo3 = { version = "0.18.3", features = ["extension-module"] }
+pyo3 = { version = "0.18.3", features = ["extension-module"], extension-module = ["extension-module"], default = ["extension-module"] }
 
 [tool.maturin]
 python-source = "python"
+
